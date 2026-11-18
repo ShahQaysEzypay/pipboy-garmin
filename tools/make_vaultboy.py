@@ -111,11 +111,11 @@ def warp_frame(src, cw, ch, bob_y, stride_factor, arm_shift):
 
 def main():
     for i in range(8):
-        fname = "vaultboy.png" if i == 0 else f"vaultboy{i}.png"
-        p = os.path.join(BASE_DIR, fname)
-        if os.path.exists(p):
-            w, h, _ = decode_png(p)
-            print(f"verified {p} ({w}x{h})")
+        for fname in (("vaultboy.png" if i == 0 else f"vaultboy{i}.png"), f"vaultboy_run{i}.png"):
+            p = os.path.join(BASE_DIR, fname)
+            if os.path.exists(p):
+                w, h, _ = decode_png(p)
+                print(f"verified {p} ({w}x{h})")
 
 if __name__ == "__main__":
     main()

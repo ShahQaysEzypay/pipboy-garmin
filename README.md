@@ -25,7 +25,7 @@ A faithful recreation of the iconic Fallout Pip-Boy 3000 terminal watch face for
 | **Top Badge** | Inverted solid green badge with full weekday name (`MONDAY` - `SUNDAY`) |
 | **Subheader** | Date `DD MM YYYY`, `[ TEMPERATURE ]` box, weather condition icon, and temperature (`17°`) |
 | **Left Stats** | • `KCAL`: Calories burned with angular RobCo progress gauge<br>• `HEARTRATE`: Current BPM with progress gauge<br>• `STAMINA`: Body Battery (0–100) with progress gauge<br>• `KM`: Daily distance in kilometers |
-| **Center** | Classic walking Vault Boy sprite with multi-frame walking animation |
+| **Center** | Vault Boy in athletic running outfit (Ciele-style 5-panel running cap, athletic running tee, long track pants, running shoes): **walks** when HR ≤ 100 BPM and **runs** when HR > 100 BPM |
 | **Steps** | Centered under Vault Boy: `STEPS` label, reversed RobCo bracket gauge, and step count |
 | **Right Time Frame** | RobCo terminal bracket containing vertical 90° `TIME` label, large digital Hour (`04`), separator dashes (`--`), and Minute (`29`) |
 | **Status Bar** | System status icons under the time box: Do Not Disturb (`zZ`), Bluetooth phone connection, Alarm, and Lock |

@@ -26,6 +26,7 @@ class PipBoyView extends WatchUi.WatchFace {
 
     private var mTimer = null;
     private var mBoyFrames as Array<WatchUi.BitmapResource?> = [null, null, null, null, null, null, null, null];
+    private var mIsRunning = false;
     private var mAnimStep = 0;
     private var mLastRefreshMin = -1;
     private var mSleeping = false;
@@ -98,14 +99,34 @@ class PipBoyView extends WatchUi.WatchFace {
     // ------------------------------------------------------------- lifecycle --
 
     function onLayout(dc as Dc) as Void {
-        mBoyFrames[0] = WatchUi.loadResource(Rez.Drawables.VaultBoy) as WatchUi.BitmapResource;
-        mBoyFrames[1] = WatchUi.loadResource(Rez.Drawables.VaultBoy1) as WatchUi.BitmapResource;
-        mBoyFrames[2] = WatchUi.loadResource(Rez.Drawables.VaultBoy2) as WatchUi.BitmapResource;
-        mBoyFrames[3] = WatchUi.loadResource(Rez.Drawables.VaultBoy3) as WatchUi.BitmapResource;
-        mBoyFrames[4] = WatchUi.loadResource(Rez.Drawables.VaultBoy4) as WatchUi.BitmapResource;
-        mBoyFrames[5] = WatchUi.loadResource(Rez.Drawables.VaultBoy5) as WatchUi.BitmapResource;
-        mBoyFrames[6] = WatchUi.loadResource(Rez.Drawables.VaultBoy6) as WatchUi.BitmapResource;
-        mBoyFrames[7] = WatchUi.loadResource(Rez.Drawables.VaultBoy7) as WatchUi.BitmapResource;
+        loadAnimFrames(mIsRunning);
+    }
+
+    // Load either the 8 walking frames (HR <= 100) or the 8 running frames (HR > 100).
+    // Releases previous frames first to keep heap memory usage low.
+    function loadAnimFrames(running as Boolean) as Void {
+        for (var i = 0; i < 8; i++) {
+            mBoyFrames[i] = null;
+        }
+        if (running) {
+            mBoyFrames[0] = WatchUi.loadResource(Rez.Drawables.VaultBoyRun0) as WatchUi.BitmapResource;
+            mBoyFrames[1] = WatchUi.loadResource(Rez.Drawables.VaultBoyRun1) as WatchUi.BitmapResource;
+            mBoyFrames[2] = WatchUi.loadResource(Rez.Drawables.VaultBoyRun2) as WatchUi.BitmapResource;
+            mBoyFrames[3] = WatchUi.loadResource(Rez.Drawables.VaultBoyRun3) as WatchUi.BitmapResource;
+            mBoyFrames[4] = WatchUi.loadResource(Rez.Drawables.VaultBoyRun4) as WatchUi.BitmapResource;
+            mBoyFrames[5] = WatchUi.loadResource(Rez.Drawables.VaultBoyRun5) as WatchUi.BitmapResource;
+            mBoyFrames[6] = WatchUi.loadResource(Rez.Drawables.VaultBoyRun6) as WatchUi.BitmapResource;
+            mBoyFrames[7] = WatchUi.loadResource(Rez.Drawables.VaultBoyRun7) as WatchUi.BitmapResource;
+        } else {
+            mBoyFrames[0] = WatchUi.loadResource(Rez.Drawables.VaultBoy) as WatchUi.BitmapResource;
+            mBoyFrames[1] = WatchUi.loadResource(Rez.Drawables.VaultBoy1) as WatchUi.BitmapResource;
+            mBoyFrames[2] = WatchUi.loadResource(Rez.Drawables.VaultBoy2) as WatchUi.BitmapResource;
+            mBoyFrames[3] = WatchUi.loadResource(Rez.Drawables.VaultBoy3) as WatchUi.BitmapResource;
+            mBoyFrames[4] = WatchUi.loadResource(Rez.Drawables.VaultBoy4) as WatchUi.BitmapResource;
+            mBoyFrames[5] = WatchUi.loadResource(Rez.Drawables.VaultBoy5) as WatchUi.BitmapResource;
+            mBoyFrames[6] = WatchUi.loadResource(Rez.Drawables.VaultBoy6) as WatchUi.BitmapResource;
+            mBoyFrames[7] = WatchUi.loadResource(Rez.Drawables.VaultBoy7) as WatchUi.BitmapResource;
+        }
     }
 
     function onShow() as Void {
@@ -138,7 +159,8 @@ class PipBoyView extends WatchUi.WatchFace {
         if (mTimer == null) {
             mTimer = new Timer.Timer();
         }
-        mTimer.start(method(:onTick), 150, true);
+        var interval = mIsRunning ? 90 : 150;
+        mTimer.start(method(:onTick), interval, true);
     }
 
     function stopTimer() as Void {
@@ -189,6 +211,17 @@ class PipBoyView extends WatchUi.WatchFace {
                     }
                     sample = hrIter.next();
                 }
+            }
+        }
+
+        // Switch between Walking (HR <= 100) and Running (HR > 100)
+        var shouldRun = (mHr > 100);
+        if (shouldRun != mIsRunning) {
+            mIsRunning = shouldRun;
+            loadAnimFrames(mIsRunning);
+            if (!mSleeping && mTimer != null) {
+                mTimer.stop();
+                startTimer();
             }
         }
     }

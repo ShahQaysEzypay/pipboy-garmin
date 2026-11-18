@@ -8,4 +8,12 @@
     <bitmap id="VaultBoy5" filename="vaultboy5.png" />
     <bitmap id="VaultBoy6" filename="vaultboy6.png" />
     <bitmap id="VaultBoy7" filename="vaultboy7.png" />
+    <bitmap id="VaultBoyRun0" filename="vaultboy_run0.png" />
+    <bitmap id="VaultBoyRun1" filename="vaultboy_run1.png" />
+    <bitmap id="VaultBoyRun2" filename="vaultboy_run2.png" />
+    <bitmap id="VaultBoyRun3" filename="vaultboy_run3.png" />
+    <bitmap id="VaultBoyRun4" filename="vaultboy_run4.png" />
+    <bitmap id="VaultBoyRun5" filename="vaultboy_run5.png" />
+    <bitmap id="VaultBoyRun6" filename="vaultboy_run6.png" />
+    <bitmap id="VaultBoyRun7" filename="vaultboy_run7.png" />
 </drawables>
