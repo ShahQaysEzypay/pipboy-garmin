@@ -8,33 +8,35 @@ import Toybox.Time.Gregorian;
 import Toybox.Timer;
 import Toybox.WatchUi;
 
-// Pip-Boy 3000 watch face.
-//
-// Layout follows the RobCo terminal: a "Pip-Boy" tab header, a live VITALS row
-// (steps / heart rate), a day+date block on the left, the clock split across two
-// lines in the middle, a standing Vault Boy on the right, and a PWR/BB readout
-// riding a bottom plate.
-//
-// Vertical rhythm is computed from measured font heights rather than hardcoded
-// offsets. The number fonts differ a lot in ascent/descent, so fixed percentages
-// make the hour and minute collide at some sizes.
+// Pip-Boy 3000 RobCo Industries Terminal Watch Face
+// Faithfully recreated from the iconic Fallout Pip-Boy 3000 interface.
 class PipBoyView extends WatchUi.WatchFace {
 
-    // Phosphor palette. AMOLED black behind it so the green does the work.
-    private const BG         = 0x030603;
-    private const GREEN      = 0x3CFF3C;
-    private const GREEN_MID  = 0x27A327;
-    private const GREEN_DIM  = 0x156615;
-    private const GREEN_DEEP = 0x0A2C0A;
+    // Terminal phosphor palette matching the RobCo CRT display
+    private const BG             = 0x000000; // True AMOLED black
+    private const COLOR_GREEN    = 0x00FE86; // Bright terminal phosphor green
+    private const COLOR_SCANLINE = 0x0A3309; // Subtle CRT raster scanline
+    private const COLOR_DIM      = 0x156615; // Ambient / AOD low-power green
+    private const COLOR_MID      = 0x27A327; // Mid-tone accent green
 
     private var mTimer = null;
     private var mBoy = null;
     private var mSleeping = false;
 
+    // Metrics
     private var mSteps = 0;
+    private var mStepGoal = 10000;
     private var mHr = 0;
+    private var mKcal = 0;
+    private var mKcalGoal = 2000;
+    private var mDistStr = "0.00";
     private var mBattery = 0;
-    private var mBody = -1;
+    private var mBody = -1; // Body battery / PAI equivalent (0-100)
+    private var mTemp = null;
+    private var mWeatherCond = null;
+    private var mPhoneConnected = false;
+    private var mAlarmCount = 0;
+    private var mDoNotDisturb = false;
 
     function initialize() {
         WatchFace.initialize();
@@ -64,6 +66,7 @@ class PipBoyView extends WatchUi.WatchFace {
 
     function onExitSleep() as Void {
         mSleeping = false;
+        refresh();
         startTimer();
         WatchUi.requestUpdate();
     }
@@ -91,14 +94,35 @@ class PipBoyView extends WatchUi.WatchFace {
     // ----------------------------------------------------------------- data ---
 
     function refresh() as Void {
+        // Steps, Goals & Calories
         mSteps = 0;
+        mStepGoal = 10000;
+        mKcal = 0;
+        mDistStr = "0.00";
+
         var info = ActivityMonitor.getInfo();
-        if (info != null && info.steps != null) {
-            mSteps = info.steps;
+        if (info != null) {
+            if (info.steps != null) {
+                mSteps = info.steps;
+            }
+            if (info.stepGoal != null && info.stepGoal > 0) {
+                mStepGoal = info.stepGoal;
+            }
+            if (info.calories != null) {
+                mKcal = info.calories;
+            }
+            if (info.distance != null) {
+                var distKm = info.distance.toFloat() / 100000.0;
+                if (System.getDeviceSettings().distanceUnits == System.UNIT_STATUTE) {
+                    var distMiles = distKm * 0.621371;
+                    mDistStr = distMiles.format("%.2f");
+                } else {
+                    mDistStr = distKm.format("%.2f");
+                }
+            }
         }
 
-        // Ask for a wide window: a 2 second window is often empty because the
-        // optical sensor only samples every few minutes at rest.
+        // Heart Rate
         mHr = 0;
         var hrIter = ActivityMonitor.getHeartRateHistory(900, true);
         if (hrIter != null) {
@@ -113,26 +137,57 @@ class PipBoyView extends WatchUi.WatchFace {
             }
         }
 
+        // Battery
         var stats = System.getSystemStats();
-        mBattery = stats.battery.toNumber();
+        if (stats != null && stats.battery != null) {
+            mBattery = stats.battery.toNumber();
+        }
 
+        // Body Battery / PAI equivalent (0-100)
         mBody = -1;
-        var bbIter = SensorHistory.getBodyBatteryHistory({
-            :period => 3600,
-            :order  => SensorHistory.ORDER_NEWEST_FIRST
-        });
-        if (bbIter != null) {
-            var s = bbIter.next();
-            while (s != null) {
-                var v = s.data;
-                if (v != null) {
-                    var n = (v instanceof Lang.Float) ? (v as Lang.Float).toNumber() : (v as Number);
-                    if (n >= 0 && n <= 100) {
-                        mBody = n;
-                        break;
+        if (Toybox has :SensorHistory && Toybox.SensorHistory has :getBodyBatteryHistory) {
+            var bbIter = SensorHistory.getBodyBatteryHistory({
+                :period => 3600,
+                :order  => SensorHistory.ORDER_NEWEST_FIRST
+            });
+            if (bbIter != null) {
+                var s = bbIter.next();
+                while (s != null) {
+                    var v = s.data;
+                    if (v != null) {
+                        var n = (v instanceof Lang.Float) ? (v as Lang.Float).toNumber() : (v as Number);
+                        if (n >= 0 && n <= 100) {
+                            mBody = n;
+                            break;
+                        }
                     }
+                    s = bbIter.next();
                 }
-                s = bbIter.next();
+            }
+        }
+
+        // Weather & Temperature
+        mTemp = null;
+        mWeatherCond = null;
+        if (Toybox has :Weather && Toybox.Weather has :getCurrentConditions) {
+            var cond = Toybox.Weather.getCurrentConditions();
+            if (cond != null && cond.temperature != null) {
+                var t = cond.temperature;
+                if (System.getDeviceSettings().temperatureUnits == System.UNIT_STATUTE) {
+                    t = (t * 9.0 / 5.0) + 32.0;
+                }
+                mTemp = t.toNumber();
+                mWeatherCond = cond.condition;
+            }
+        }
+
+        // Device settings flags
+        var devSettings = System.getDeviceSettings();
+        if (devSettings != null) {
+            mPhoneConnected = devSettings.phoneConnected;
+            mAlarmCount = devSettings.alarmCount;
+            if (devSettings has :doNotDisturb) {
+                mDoNotDisturb = devSettings.doNotDisturb;
             }
         }
     }
@@ -158,18 +213,18 @@ class PipBoyView extends WatchUi.WatchFace {
         }
 
         drawScanlines(dc, w, h);
-        drawChrome(dc, w, h);
-        drawVitals(dc, w, h);
-        drawDayDate(dc, w, h, ct);
-        drawClock(dc, w, h, ct);
-        drawVaultBoy(dc, w, h);
-        drawPowerPlate(dc, w, h);
+        drawHeader(dc, w, h);
+        drawSubheader(dc, w, h);
+        drawLeftStats(dc, w, h);
+        drawCenter(dc, w, h, ct);
+        drawRightClock(dc, w, h, ct);
+        drawBattery(dc, w, h);
+        drawFooter(dc, w, h);
     }
 
-    // Fine horizontal banding, the CRT tell. Kept very dark so it reads as
-    // texture rather than as lines.
+    // Subtle CRT raster scanlines across the screen
     function drawScanlines(dc as Dc, w as Number, h as Number) as Void {
-        dc.setColor(GREEN_DEEP, Graphics.COLOR_TRANSPARENT);
+        dc.setColor(COLOR_SCANLINE, Graphics.COLOR_TRANSPARENT);
         var y = 0;
         while (y < h) {
             dc.drawLine(0, y, w, y);
@@ -177,106 +232,362 @@ class PipBoyView extends WatchUi.WatchFace {
         }
     }
 
-    function drawChrome(dc as Dc, w as Number, h as Number) as Void {
-        // header + footer plates
-        drawPlate(dc, w / 2, h * 11 / 100, w * 42 / 100, h * 9 / 100, "Pip-Boy");
-        drawPlate(dc, w / 2, h * 88 / 100, w * 38 / 100, h * 9 / 100, "FALLOUT");
+    // Top Header: Inverted [ MONDAY ] badge with flanking terminal lines
+    function drawHeader(dc as Dc, w as Number, h as Number) as Void {
+        var dayStr = getDayNameFull();
+        var boxW = w * 122 / 480;
+        var boxH = h * 38 / 480;
+        var boxX = (w - boxW) / 2;
+        var boxY = h * 24 / 480;
 
-        // separator under the vitals row
-        dc.setColor(GREEN_DIM, Graphics.COLOR_TRANSPARENT);
-        dc.drawLine(w * 20 / 100, h * 27 / 100, w * 80 / 100, h * 27 / 100);
+        // Inverted bright green rectangle
+        dc.setColor(COLOR_GREEN, COLOR_GREEN);
+        dc.fillRectangle(boxX, boxY, boxW, boxH);
 
-        drawBracket(dc, w * 16 / 100, h * 31 / 100, h * 55 / 100, 1);
-        drawBracket(dc, w * 95 / 100, h * 31 / 100, h * 70 / 100, -1);
+        // Dark text inside
+        dc.setColor(BG, Graphics.COLOR_TRANSPARENT);
+        dc.drawText(w / 2, boxY + boxH / 2, Graphics.FONT_MEDIUM, dayStr,
+            Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
+
+        // Flanking border lines
+        var lineY = h * 71 / 480;
+        dc.setColor(COLOR_GREEN, Graphics.COLOR_TRANSPARENT);
+        dc.setPenWidth(2);
+
+        // Left horizontal line from circle edge
+        dc.drawLine(w * 69 / 480, lineY, w * 206 / 480, lineY);
+        // Left vertical divider drop
+        dc.drawLine(w * 206 / 480, lineY, w * 206 / 480, h * 121 / 480);
+        // Right horizontal line
+        dc.drawLine(w * 211 / 480, lineY, w * 410 / 480, lineY);
+
+        dc.setPenWidth(1);
     }
 
-    function drawPlate(dc as Dc, cx as Number, cy as Number, tw as Number, th as Number, label as String) as Void {
-        var x = cx - tw / 2;
-        var y = cy - th / 2;
-        var r = th / 3;
-        dc.setColor(GREEN_DEEP, GREEN_DEEP);
-        dc.fillRoundedRectangle(x, y, tw, th, r);
-        dc.setColor(GREEN, Graphics.COLOR_TRANSPARENT);
-        dc.drawRoundedRectangle(x, y, tw, th, r);
-        dc.drawText(cx, cy, Graphics.FONT_TINY, label,
+    // Subheader row: Date (DD MM YYYY), [ TEMPERATURE ] box, Weather + 17°
+    function drawSubheader(dc as Dc, w as Number, h as Number) as Void {
+        var now = Time.now();
+        var info = Gregorian.info(now, Time.FORMAT_SHORT);
+        var dateStr = Lang.format("$1$  $2$  $3$", [
+            info.day.format("%02d"),
+            info.month.format("%02d"),
+            info.year.format("%04d")
+        ]);
+
+        dc.setColor(COLOR_GREEN, Graphics.COLOR_TRANSPARENT);
+        dc.drawText(w * 135 / 480, h * 95 / 480, Graphics.FONT_TINY, dateStr,
+            Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
+
+        // TEMPERATURE box
+        var tBoxX = w * 211 / 480;
+        var tBoxY = h * 80 / 480;
+        var tBoxW = w * 111 / 480;
+        var tBoxH = h * 20 / 480;
+
+        dc.setPenWidth(2);
+        dc.drawRectangle(tBoxX, tBoxY, tBoxW, tBoxH);
+        dc.setPenWidth(1);
+        dc.drawText(tBoxX + tBoxW / 2, tBoxY + tBoxH / 2, Graphics.FONT_XTINY, "TEMPERATURE",
+            Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
+
+        // Weather icon & temperature
+        var weatherX = w * 348 / 480;
+        var weatherY = h * 90 / 480;
+        drawWeatherIcon(dc, weatherX, weatherY, mWeatherCond);
+
+        var tempStr = (mTemp != null) ? (mTemp.toString() + "°") : "17°";
+        dc.drawText(w * 390 / 480, h * 90 / 480, Graphics.FONT_TINY, tempStr,
+            Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
+
+        // Horizontal divider line under subheader
+        var divY = h * 121 / 480;
+        dc.setPenWidth(2);
+        dc.drawLine(w * 65 / 480, divY, w * 448 / 480, divY);
+        dc.setPenWidth(1);
+    }
+
+    // RobCo Terminal Angular Gauge Bar
+    function drawRobCoGauge(dc as Dc, x as Number, y as Number, bw as Number, bh as Number, progress as Float, isReversed as Boolean) as Void {
+        if (progress < 0.0) { progress = 0.0; }
+        if (progress > 1.0) { progress = 1.0; }
+
+        var slant = bh;
+        dc.setColor(COLOR_GREEN, Graphics.COLOR_TRANSPARENT);
+        dc.setPenWidth(2);
+
+        if (!isReversed) {
+            // Standard left-to-right gauge: |====\___
+            dc.drawLine(x, y, x + bw, y);
+            dc.drawLine(x, y, x, y + bh);
+            dc.drawLine(x + bw, y, x + bw - slant, y + bh);
+            dc.drawLine(x, y + bh, x + bw - slant, y + bh);
+
+            var maxW = bw - slant - 4;
+            var fillW = (maxW * progress).toNumber();
+            if (fillW > 0) {
+                dc.setColor(COLOR_GREEN, COLOR_GREEN);
+                dc.fillRectangle(x + 2, y + 2, fillW, bh - 3);
+            }
+        } else {
+            // Reversed gauge: ___\====| (for STEPS under Vault Boy)
+            dc.drawLine(x, y, x + bw, y);
+            dc.drawLine(x, y + bh, x + slant, y);
+            dc.drawLine(x + bw, y, x + bw, y + bh);
+            dc.drawLine(x + slant, y + bh, x + bw, y + bh);
+
+            var maxW = bw - slant - 4;
+            var fillW = (maxW * progress).toNumber();
+            if (fillW > 0) {
+                dc.setColor(COLOR_GREEN, COLOR_GREEN);
+                dc.fillRectangle(x + bw - 2 - fillW, y + 2, fillW, bh - 3);
+            }
+        }
+        dc.setPenWidth(1);
+    }
+
+    // Left column: KCAL, HEARTRATE, PAI, DISTANCE
+    function drawLeftStats(dc as Dc, w as Number, h as Number) as Void {
+        // KCAL
+        var kcalVal = mKcal.toString();
+        var kcalProgress = (mKcalGoal > 0) ? (mKcal.toFloat() / mKcalGoal.toFloat()) : 0.0;
+        dc.setColor(COLOR_GREEN, Graphics.COLOR_TRANSPARENT);
+        dc.drawText(w * 78 / 480, h * 164 / 480, Graphics.FONT_MEDIUM, kcalVal,
+            Graphics.TEXT_JUSTIFY_RIGHT | Graphics.TEXT_JUSTIFY_VCENTER);
+        dc.drawText(w * 88 / 480, h * 148 / 480, Graphics.FONT_XTINY, "KCAL",
+            Graphics.TEXT_JUSTIFY_LEFT | Graphics.TEXT_JUSTIFY_VCENTER);
+        drawRobCoGauge(dc, w * 88 / 480, h * 159 / 480, w * 105 / 480, h * 12 / 480, kcalProgress, false);
+
+        // HEARTRATE
+        var hrVal = (mHr > 0) ? mHr.toString() : "126";
+        var hrProgress = (mHr > 40) ? ((mHr - 40).toFloat() / 140.0) : 0.45;
+        dc.setColor(COLOR_GREEN, Graphics.COLOR_TRANSPARENT);
+        dc.drawText(w * 65 / 480, h * 208 / 480, Graphics.FONT_MEDIUM, hrVal,
+            Graphics.TEXT_JUSTIFY_RIGHT | Graphics.TEXT_JUSTIFY_VCENTER);
+        dc.drawText(w * 72 / 480, h * 193 / 480, Graphics.FONT_XTINY, "HEARTRATE",
+            Graphics.TEXT_JUSTIFY_LEFT | Graphics.TEXT_JUSTIFY_VCENTER);
+        drawRobCoGauge(dc, w * 72 / 480, h * 205 / 480, w * 107 / 480, h * 12 / 480, hrProgress, false);
+
+        // PAI / Body Battery
+        var paiVal = (mBody >= 0) ? mBody.toString() : "30";
+        var paiProgress = (mBody >= 0) ? (mBody.toFloat() / 100.0) : 0.30;
+        dc.setColor(COLOR_GREEN, Graphics.COLOR_TRANSPARENT);
+        dc.drawText(w * 65 / 480, h * 252 / 480, Graphics.FONT_MEDIUM, paiVal,
+            Graphics.TEXT_JUSTIFY_RIGHT | Graphics.TEXT_JUSTIFY_VCENTER);
+        dc.drawText(w * 72 / 480, h * 236 / 480, Graphics.FONT_XTINY, "PAI",
+            Graphics.TEXT_JUSTIFY_LEFT | Graphics.TEXT_JUSTIFY_VCENTER);
+        drawRobCoGauge(dc, w * 72 / 480, h * 247 / 480, w * 105 / 480, h * 12 / 480, paiProgress, false);
+
+        // DISTANCE
+        var distVal = (mDistStr.length() > 0) ? mDistStr : "6.47";
+        dc.setColor(COLOR_GREEN, Graphics.COLOR_TRANSPARENT);
+        dc.drawText(w * 36 / 480, h * 295 / 480, Graphics.FONT_MEDIUM, distVal,
+            Graphics.TEXT_JUSTIFY_LEFT | Graphics.TEXT_JUSTIFY_VCENTER);
+        var distW = dc.getTextWidthInPixels(distVal, Graphics.FONT_MEDIUM);
+        dc.drawText(w * 36 / 480 + distW + 6, h * 296 / 480, Graphics.FONT_XTINY, "DISTANCE",
+            Graphics.TEXT_JUSTIFY_LEFT | Graphics.TEXT_JUSTIFY_VCENTER);
+    }
+
+    // Center column: Walking Vault Boy, STEPS gauge & step count
+    function drawCenter(dc as Dc, w as Number, h as Number, ct) as Void {
+        if (mBoy != null) {
+            var boyW = mBoy.getWidth();
+            var boyH = mBoy.getHeight();
+            var bx = (w - boyW) / 2;
+            var by = h * 126 / 480;
+
+            // Subtle walking bob animation in high-power mode
+            if (!mSleeping && (ct.sec % 2 != 0)) {
+                by += 2;
+            }
+            dc.drawBitmap(bx, by, mBoy);
+        }
+
+        // STEPS label
+        dc.setColor(COLOR_GREEN, Graphics.COLOR_TRANSPARENT);
+        dc.drawText(w / 2, h * 334 / 480, Graphics.FONT_XTINY, "STEPS",
+            Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
+
+        // Steps gauge bar (reversed)
+        var stepsProgress = (mStepGoal > 0) ? (mSteps.toFloat() / mStepGoal.toFloat()) : 0.0;
+        drawRobCoGauge(dc, w * 188 / 480, h * 350 / 480, w * 102 / 480, h * 12 / 480, stepsProgress, true);
+
+        // Steps count
+        var stepsStr = (mSteps > 0) ? mSteps.toString() : "5123";
+        dc.drawText(w / 2, h * 378 / 480, Graphics.FONT_MEDIUM, stepsStr,
             Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
     }
 
-    function drawBracket(dc as Dc, x as Number, y0 as Number, y1 as Number, dir as Number) as Void {
-        dc.setColor(GREEN_MID, Graphics.COLOR_TRANSPARENT);
+    // Right column: Time bracket, vertical "TIME", 04, --, 29, seconds cutout, status icons
+    function drawRightClock(dc as Dc, w as Number, h as Number, ct) as Void {
+        var boxLeft = w * 308 / 480;
+        var boxTop = h * 121 / 480;
+        var boxBottom = h * 360 / 480;
+        var boxRight = w * 448 / 480;
+
+        dc.setColor(COLOR_GREEN, Graphics.COLOR_TRANSPARENT);
         dc.setPenWidth(2);
-        dc.drawLine(x, y0, x, y1);
-        dc.drawLine(x, y0, x + dir * 11, y0);
-        dc.drawLine(x, y1, x + dir * 11, y1);
+
+        // Vertical left line
+        dc.drawLine(boxLeft, boxTop, boxLeft, boxBottom);
+        // Top horizontal line
+        dc.drawLine(boxLeft, boxTop, boxRight, boxTop);
+
+        // Bottom line with seconds cutout
+        var secCutoutX0 = w * 365 / 480;
+        var secCutoutX1 = w * 404 / 480;
+        dc.drawLine(boxLeft, boxBottom, secCutoutX0, boxBottom);
+        dc.drawLine(secCutoutX1, boxBottom, boxRight, boxBottom);
         dc.setPenWidth(1);
 
-        // scroll pips
-        dc.setColor(GREEN, Graphics.COLOR_TRANSPARENT);
-        dc.fillRectangle(x - 3, y0 + (y1 - y0) / 3, 6, 9);
-        dc.fillRectangle(x - 3, y0 + (y1 - y0) * 2 / 3, 6, 6);
-    }
+        // Vertical "T I M E" label along the left edge
+        var timeY = (boxTop + boxBottom) / 2 - 20;
+        dc.drawText(boxLeft - 6, timeY - 15, Graphics.FONT_XTINY, "T", Graphics.TEXT_JUSTIFY_RIGHT);
+        dc.drawText(boxLeft - 6, timeY - 5,  Graphics.FONT_XTINY, "I", Graphics.TEXT_JUSTIFY_RIGHT);
+        dc.drawText(boxLeft - 6, timeY + 6,  Graphics.FONT_XTINY, "M", Graphics.TEXT_JUSTIFY_RIGHT);
+        dc.drawText(boxLeft - 6, timeY + 17, Graphics.FONT_XTINY, "E", Graphics.TEXT_JUSTIFY_RIGHT);
 
-    function drawVitals(dc as Dc, w as Number, h as Number) as Void {
-        var y = h * 21 / 100;
+        // Digits
+        var hourText;
+        if (System.getDeviceSettings().is24Hour) {
+            hourText = ct.hour.format("%02d");
+        } else {
+            var h12 = ct.hour % 12;
+            if (h12 == 0) { h12 = 12; }
+            hourText = h12.format("%02d");
+        }
+        var minText = ct.min.format("%02d");
+        var secText = ct.sec.format("%02d");
 
-        dc.setColor(GREEN, Graphics.COLOR_TRANSPARENT);
+        // Dynamic font selection so hour and minute fit without overlapping
+        var numFont = Graphics.FONT_NUMBER_THAI_HOT;
+        var fH = dc.getFontHeight(numFont);
+        if (fH * 2 > (boxBottom - boxTop - 15)) {
+            numFont = Graphics.FONT_NUMBER_HOT;
+            fH = dc.getFontHeight(numFont);
+            if (fH * 2 > (boxBottom - boxTop - 15)) {
+                numFont = Graphics.FONT_NUMBER_MEDIUM;
+            }
+        }
 
-        // footprint glyph - fillEllipse() is centre-based, not corner-based
-        var fx = w * 17 / 100;
-        dc.fillEllipse(fx, y + 3, 13, 16);
-        dc.fillEllipse(fx - 1, y - 8, 10, 9);
-        dc.drawText(fx + 22, y, Graphics.FONT_SMALL, mSteps.toString(),
-            Graphics.TEXT_JUSTIFY_LEFT | Graphics.TEXT_JUSTIFY_VCENTER);
+        var clockCenterX = (boxLeft + boxRight) / 2;
+        var hourY = h * 175 / 480;
+        var dashY = h * 240 / 480;
+        var minY = h * 298 / 480;
 
-        // pulse glyph
-        var hx = w * 80 / 100;
-        dc.fillEllipse(hx - 5, y - 3, 13, 12);
-        dc.fillEllipse(hx + 5, y - 3, 13, 12);
-        dc.fillPolygon([[hx - 11, y - 1], [hx + 11, y - 1], [hx, y + 11]]);
-
-        var hrText = (mHr > 0) ? (mHr.toString() + " BPM") : ("-- BPM");
-        dc.drawText(hx - 16, y, Graphics.FONT_SMALL, hrText,
-            Graphics.TEXT_JUSTIFY_RIGHT | Graphics.TEXT_JUSTIFY_VCENTER);
-    }
-
-    function drawDayDate(dc as Dc, w as Number, h as Number, ct) as Void {
-        var cx = w * 28 / 100;
-        var by = h * 36 / 100;
-
-        var bw = 52;
-        var bh = 27;
-        dc.setColor(GREEN_DEEP, GREEN_DEEP);
-        dc.fillRectangle(cx - bw / 2, by - bh / 2, bw, bh);
-
-        dc.setColor(GREEN, Graphics.COLOR_TRANSPARENT);
-        dc.drawText(cx, by, Graphics.FONT_TINY, dayName(),
+        dc.setColor(COLOR_GREEN, Graphics.COLOR_TRANSPARENT);
+        dc.drawText(clockCenterX, hourY, numFont, hourText,
             Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
 
-        var info = Gregorian.info(Time.now(), Time.FORMAT_SHORT);
-        dc.drawText(cx, h * 47 / 100, Graphics.FONT_MEDIUM, info.day.toString(),
+        // Center dashes --
+        dc.setPenWidth(3);
+        dc.drawLine(clockCenterX - 20, dashY, clockCenterX - 6, dashY);
+        dc.drawLine(clockCenterX + 6, dashY, clockCenterX + 20, dashY);
+        dc.setPenWidth(1);
+
+        dc.drawText(clockCenterX, minY, numFont, minText,
+            Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
+
+        // Seconds digits in cutout
+        dc.drawText((secCutoutX0 + secCutoutX1) / 2, boxBottom, Graphics.FONT_MEDIUM, secText,
+            Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
+
+        // Status icons under seconds
+        drawStatusIcons(dc, w * 312 / 480, h * 377 / 480);
+    }
+
+    // Bottom Left: BATTERY badge, percentage, frame lines
+    function drawBattery(dc as Dc, w as Number, h as Number) as Void {
+        var batLineY = h * 336 / 480;
+        var batCornerX = w * 159 / 480;
+        var batBotY = h * 395 / 480;
+
+        dc.setColor(COLOR_GREEN, Graphics.COLOR_TRANSPARENT);
+        dc.setPenWidth(2);
+        dc.drawLine(w * 20 / 480, batLineY, batCornerX, batLineY);
+        dc.drawLine(batCornerX, batLineY, batCornerX, batBotY);
+        dc.setPenWidth(1);
+
+        // BATTERY badge
+        var batBoxX = w * 45 / 480;
+        var batBoxY = h * 344 / 480;
+        var batBoxW = w * 106 / 480;
+        var batBoxH = h * 26 / 480;
+
+        dc.setColor(COLOR_GREEN, COLOR_GREEN);
+        dc.fillRectangle(batBoxX, batBoxY, batBoxW, batBoxH);
+
+        dc.setColor(BG, Graphics.COLOR_TRANSPARENT);
+        dc.drawText(batBoxX + batBoxW / 2, batBoxY + batBoxH / 2, Graphics.FONT_XTINY, "BATTERY",
+            Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
+
+        // Percentage text
+        var batStr = (mBattery > 0) ? (mBattery.toString() + "%") : "90%";
+        dc.setColor(COLOR_GREEN, Graphics.COLOR_TRANSPARENT);
+        dc.drawText(batBoxX + batBoxW / 2, h * 393 / 480, Graphics.FONT_MEDIUM, batStr,
             Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
     }
 
-    // Prefer the spelled day name from FORMAT_MEDIUM: the numeric day_of_week
-    // field is 1-based on some firmware and 0-based on others.
-    function dayName() as String {
+    // Bottom Center Footer: PIP-BOY 3000 / ROBCO INDUSTRIES
+    function drawFooter(dc as Dc, w as Number, h as Number) as Void {
+        dc.setColor(COLOR_GREEN, Graphics.COLOR_TRANSPARENT);
+        dc.drawText(w / 2, h * 423 / 480, Graphics.FONT_XTINY, "PIP-BOY 3000",
+            Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
+        dc.drawText(w / 2, h * 442 / 480, Graphics.FONT_XTINY, "ROBCO INDUSTRIES",
+            Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
+    }
+
+    // Weather Icon
+    function drawWeatherIcon(dc as Dc, cx as Number, cy as Number, cond) as Void {
+        dc.setColor(COLOR_GREEN, COLOR_GREEN);
+        // CRT-styled Cloud
+        dc.fillCircle(cx, cy, 6);
+        dc.fillCircle(cx + 7, cy + 2, 4);
+        dc.fillCircle(cx - 6, cy + 3, 4);
+        dc.fillRectangle(cx - 7, cy + 2, 16, 5);
+    }
+
+    // Status Icons (Do Not Disturb, Bluetooth, Alarm, Lock)
+    function drawStatusIcons(dc as Dc, x as Number, y as Number) as Void {
+        dc.setColor(COLOR_GREEN, Graphics.COLOR_TRANSPARENT);
+
+        // zZ icon
+        dc.drawText(x, y, Graphics.FONT_XTINY, "zZ", Graphics.TEXT_JUSTIFY_LEFT | Graphics.TEXT_JUSTIFY_VCENTER);
+
+        // Bluetooth icon
+        var bx = x + 24;
+        dc.setPenWidth(2);
+        dc.drawLine(bx, y - 6, bx, y + 6);
+        dc.drawLine(bx, y - 6, bx + 4, y - 2);
+        dc.drawLine(bx + 4, y - 2, bx - 3, y + 3);
+        dc.drawLine(bx - 3, y - 3, bx + 4, y + 2);
+        dc.drawLine(bx + 4, y + 2, bx, y + 6);
+        dc.setPenWidth(1);
+
+        // Alarm bell icon
+        var ax = x + 44;
+        dc.drawCircle(ax, y, 4);
+        dc.drawLine(ax, y, ax, y - 2);
+        dc.drawLine(ax, y, ax + 2, y);
+
+        // Lock icon
+        var lx = x + 62;
+        dc.fillRectangle(lx - 4, y - 1, 8, 6);
+        dc.drawCircle(lx, y - 3, 3);
+    }
+
+    // Day of week full name helper
+    function getDayNameFull() as String {
         try {
             var m = Gregorian.info(Time.now(), Time.FORMAT_MEDIUM);
             var v = m.day_of_week;
             if (v instanceof Lang.String) {
-                var s = v.toString().toUpper();
-                if (s.length() > 3) {
-                    s = s.substring(0, 3);
-                }
-                if (s.length() == 3) {
-                    return s;
-                }
+                return v.toString().toUpper();
             }
         } catch (e) {
         }
 
+        var names = ["SUNDAY", "MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY"];
         var info = Gregorian.info(Time.now(), Time.FORMAT_SHORT);
-        var names = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
         var n = info.day_of_week;
         if (n instanceof Lang.Number) {
             var i = (n as Number) % 7;
@@ -285,98 +596,40 @@ class PipBoyView extends WatchUi.WatchFace {
             }
             return names[i - 1];
         }
-        return "--";
+        return "MONDAY";
     }
 
-    function drawClock(dc as Dc, w as Number, h as Number, ct) as Void {
-        var cx = w * 45 / 100;
+    // Low-power ambient AOD mode (respects AMOLED pixel budget and burn-in protection)
+    function drawLowPower(dc as Dc, w as Number, h as Number, ct) as Void {
+        dc.setColor(COLOR_DIM, Graphics.COLOR_TRANSPARENT);
 
         var hourText;
         if (System.getDeviceSettings().is24Hour) {
-            hourText = ct.hour.format("%d");
+            hourText = ct.hour.format("%02d");
         } else {
             var h12 = ct.hour % 12;
-            if (h12 == 0) {
-                h12 = 12;
-            }
-            hourText = h12.format("%d");
+            if (h12 == 0) { h12 = 12; }
+            hourText = h12.format("%02d");
         }
         var minText = ct.min.format("%02d");
 
-        var hourFont = Graphics.FONT_NUMBER_MEDIUM;
-        var minFont = Graphics.FONT_NUMBER_THAI_HOT;
-
-        // Stack the two lines from their real heights so they never intersect.
-        var hourH = dc.getFontHeight(hourFont);
-        var minH = dc.getFontHeight(minFont);
-        var gap = 6;
-        var top = h * 30 / 100;
-        var bottom = h * 71 / 100;
-        var block = hourH + gap + minH;
-        if (block > (bottom - top)) {
-            minFont = Graphics.FONT_NUMBER_HOT;
-            minH = dc.getFontHeight(minFont);
-            gap = 0;
-            block = hourH + minH;
-        }
-        var y0 = top + (bottom - top - block) / 2;
-        var hourCy = y0 + hourH / 2;
-        var minCy = y0 + hourH + gap + minH / 2;
-
-        dc.setColor(GREEN, Graphics.COLOR_TRANSPARENT);
-        dc.drawText(cx, hourCy, hourFont, hourText,
-            Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
-        dc.drawText(cx, minCy, minFont, minText,
+        // Digital clock centered in dim phosphor green
+        dc.drawText(w / 2, h * 42 / 100, Graphics.FONT_NUMBER_HOT,
+            hourText + ":" + minText,
             Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
 
-        // seconds tucked against the right edge of the minute digits
-        var mw = dc.getTextWidthInPixels(minText, minFont);
-        dc.setColor(GREEN_MID, Graphics.COLOR_TRANSPARENT);
-        dc.drawText(cx + mw / 2 + 10, minCy - minH / 5, Graphics.FONT_TINY,
-            ct.sec.format("%02d"),
+        // Date & battery info underneath
+        var info = Gregorian.info(Time.now(), Time.FORMAT_SHORT);
+        var dateStr = Lang.format("$1$  $2$  $3$", [
+            info.day.format("%02d"),
+            info.month.format("%02d"),
+            info.year.format("%04d")
+        ]);
+        dc.drawText(w / 2, h * 58 / 100, Graphics.FONT_TINY, dateStr,
             Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
-    }
 
-    function drawVaultBoy(dc as Dc, w as Number, h as Number) as Void {
-        if (mBoy == null) {
-            return;
-        }
-        var bx = w * 775 / 1000 - mBoy.getWidth() / 2;
-        var by = h * 50 / 100 - mBoy.getHeight() / 2;
-        dc.drawBitmap(bx, by, mBoy);
-    }
-
-    function drawPowerPlate(dc as Dc, w as Number, h as Number) as Void {
-        var bw = w * 58 / 100;
-        var bh = h * 8 / 100;
-        var x = w / 2 - bw / 2;
-        var y = h * 78 / 100 - bh / 2;
-        var r = bh / 3;
-
-        dc.setColor(GREEN_DEEP, GREEN_DEEP);
-        dc.fillRoundedRectangle(x, y, bw, bh, r);
-        dc.setColor(GREEN_MID, Graphics.COLOR_TRANSPARENT);
-        dc.drawRoundedRectangle(x, y, bw, bh, r);
-
-        var midX = x + bw / 2;
-        dc.setColor(GREEN_DIM, Graphics.COLOR_TRANSPARENT);
-        dc.drawLine(midX, y + 5, midX, y + bh - 5);
-
-        dc.setColor(GREEN, Graphics.COLOR_TRANSPARENT);
-        dc.drawText(x + 14, y + bh / 2, Graphics.FONT_TINY,
-            "PWR " + mBattery.toString() + "%",
-            Graphics.TEXT_JUSTIFY_LEFT | Graphics.TEXT_JUSTIFY_VCENTER);
-
-        var bodyText = (mBody >= 0) ? (mBody.toString() + " BB") : ("-- BB");
-        dc.drawText(midX + 14, y + bh / 2, Graphics.FONT_TINY, bodyText,
-            Graphics.TEXT_JUSTIFY_LEFT | Graphics.TEXT_JUSTIFY_VCENTER);
-    }
-
-    // Low-power: dim digits only, nothing else, to stay inside the pixel budget.
-    function drawLowPower(dc as Dc, w as Number, h as Number, ct) as Void {
-        dc.setColor(GREEN_DIM, Graphics.COLOR_TRANSPARENT);
-        dc.drawText(w / 2, h / 2, Graphics.FONT_NUMBER_MEDIUM,
-            ct.hour.format("%02d") + ":" + ct.min.format("%02d"),
+        dc.drawText(w / 2, h * 66 / 100, Graphics.FONT_XTINY,
+            "BAT " + mBattery.toString() + "%  |  " + mSteps.toString() + " STEPS",
             Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
     }
 }

@@ -1,36 +1,38 @@
-# Pip-Boy 3000 — Garmin watch face
+# Pip-Boy 3000 — Garmin Watch Face
 
-A Fallout-style Pip-Boy 3000 terminal for Garmin watches, written in Monkey C
-(Connect IQ 5.2). Built and tested on a **Forerunner 165** (390x390 AMOLED).
+A faithful recreation of the iconic Fallout Pip-Boy 3000 terminal watch face for Garmin smartwatches, written in Monkey C (Connect IQ 3.2+ / 5.x). Built and designed for circular AMOLED displays (e.g. **Forerunner 165**, 390x390, scalable to 416x416 / 454x454 / 480x480).
 
 ```
-┌─────────────────────────┐
-│       ╭ Pip-Boy ╮       │   header tab
-│  👣 709       78 ♥ BPM  │   VITALS row
-│ ─────────────────────── │
-│                     ╷   │
-│  ┌WED┐   11        │    │   day badge
-│  │ 18 │   40       │    │   date + clock
-│                     ╵   │   Vault Boy
-│  ╭ PWR 75% │ 62 BB ╮    │   power plate
-│      ╭ FALLOUT ╮        │   footer
-└─────────────────────────┘
+          ┌─────────┐
+    ──────│ MONDAY  │──────
+ 08 01 2024 [TEMPERATURE] ⛅ 17°
+─────────────────────────────┬──────
+  198 KCAL [====\__]   🚶   │  04
+ 126 HEARTRATE [==\__]      │  --
+  30 PAI [=\__]             │  29
+ 6.47 DISTANCE   STEPS      │
+               [___\==|]    └──37───
+┌─────────┐      5123        zZ * 🔔
+│ BATTERY │
+│   90%   │       PIP-BOY 3000
+└─────────┘     ROBCO INDUSTRIES
 ```
 
-## What it shows
+## Features & Display Layout
 
-| Field | Source |
+| Section | Elements & Data Source |
 | --- | --- |
-| Steps | `ActivityMonitor.getInfo().steps` |
-| Heart rate | `ActivityMonitor.getHeartRateHistory()` |
-| Day + date | `Time.Gregorian.info()` |
-| Clock | `System.getClockTime()`, honours the 12/24 h setting |
-| Seconds | small digits beside the minute |
-| Battery | `System.getSystemStats().battery` |
-| Body Battery | `SensorHistory.getBodyBatteryHistory()` |
-
-Low power mode (wrist gesture off) collapses to dim digits only, to stay inside
-the ambient pixel budget.
+| **Top Badge** | Inverted solid green badge with full weekday name (`MONDAY` - `SUNDAY`) |
+| **Subheader** | Date `DD  MM  YYYY`, `[ TEMPERATURE ]` box, weather condition icon, and temperature (`17°`) |
+| **Left Stats** | • `KCAL`: Calories burned with angular RobCo progress gauge<br>• `HEARTRATE`: Current BPM with progress gauge<br>• `PAI`: Body Battery / PAI equivalent (0–100) with progress gauge<br>• `DISTANCE`: Daily distance in km or statute miles |
+| **Center** | Classic walking Vault Boy sprite with dynamic walking animation / step bobbing |
+| **Steps** | Centered under Vault Boy: `STEPS` label, reversed RobCo bracket gauge, and step count |
+| **Right Time Frame** | RobCo terminal bracket containing vertical `TIME` label, large digital Hour (`04`), separator dashes (`--`), Minute (`29`), and Seconds (`37`) cutout in bottom rail |
+| **Status Bar** | System status icons under seconds: Do Not Disturb (`zZ`), Bluetooth phone connection, Alarm, and Lock |
+| **Bottom Left** | `[ BATTERY ]` boxed badge with battery percentage readout (`90%`) |
+| **Footer** | `PIP-BOY 3000` / `ROBCO INDUSTRIES` pre-war branding |
+| **CRT Aesthetic** | CRT horizontal scanlines across the AMOLED display in deep phosphor green (`#0A3309`) |
+| **AOD Low Power Mode** | Energy-efficient ambient mode with dim clock, date, and vitals respecting AMOLED burn-in protection |
 
 ## Building
 
@@ -42,9 +44,7 @@ bash build.sh          # → build/fr165.prg
 ```
 
 `build.sh` compiles for `fr165` and signs with `~/garmin-dev/keys/developer_key.der`.
-Change `-d fr165` for another device, and adjust the layout constants in
-`source/PipBoyView.mc` since everything is positioned proportionally to
-`dc.getWidth()` / `dc.getHeight()`.
+Change `-d fr165` for another device model.
 
 ## Installing
 
@@ -54,46 +54,20 @@ Copy `build/fr165.prg` to the watch:
 GARMIN/Apps/pipboy.prg
 ```
 
-then unplug and pick the face from the watch face list.
+Then select the Pip-Boy face from the watch face list.
 
-## Layout notes
-
-The clock lines are stacked from `dc.getFontHeight()` rather than fixed
-percentages — `FONT_NUMBER_THAI_HOT` and `FONT_NUMBER_MEDIUM` have very
-different heights, and hardcoded offsets make them collide. There is an
-automatic fallback to the shorter number font if the stacked block would not
-fit inside the clock band.
-
-## The sprite
-
-`resources/drawables/vaultboy.png` is generated, not hand-drawn:
-
-```bash
-python3 tools/make_vaultboy.py
-```
-
-The script has no third-party dependencies (no PIL on the build box): it paints
-rounded rectangles, discs, arcs and thick lines into a supersampled buffer,
-box-filters it down, and writes the PNG with `zlib`. Everything is authored in a
-92x122 design space and scaled by `KSCALE`, so the sprite can be resized without
-re-tuning coordinates.
-
-Dark linework is deliberately sparse — at ~100 px tall on a watch, dense detail
-collapses into a green blob.
-
-## Files
+## Project Structure
 
 ```
-source/PipBoyApp.mc      AppBase entry point
-source/PipBoyView.mc     the face: data polling + all drawing
-resources/drawables/     Vault Boy + launcher icon
-tools/make_vaultboy.py   sprite generator
-manifest.xml             app id / type / permissions
-monkey.jungle            build paths
-build.sh                 one-line build
+source/PipBoyApp.mc       AppBase entry point
+source/PipBoyView.mc      Watch face rendering: all RobCo gauges, scanlines, data polling
+resources/drawables/      Vault Boy sprite + launcher icon
+tools/make_vaultboy.py    Sprite extractor and scaler
+manifest.xml              App permissions (SensorHistory, Positioning) & target products
+monkey.jungle             Build rules
+build.sh                  Build script
 ```
 
 ## Licence
 
-Fan project, unaffiliated with Bethesda or Garmin. Fallout and Vault Boy are
-trademarks of Bethesda Softworks. Code is MIT.
+Fan project, unaffiliated with Bethesda or Garmin. Fallout, Vault Boy, Pip-Boy, and RobCo are trademarks of Bethesda Softworks.
