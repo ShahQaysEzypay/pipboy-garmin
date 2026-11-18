@@ -25,9 +25,7 @@ class PipBoyView extends WatchUi.WatchFace {
     private const ALIGN_RIGHT  = 2;
 
     private var mTimer = null;
-    private var mBoy0 = null;
-    private var mBoy1 = null;
-    private var mBoy2 = null;
+    private var mBoyFrames as Array<WatchUi.BitmapResource?> = [null, null, null, null, null, null, null, null];
     private var mAnimStep = 0;
     private var mLastRefreshMin = -1;
     private var mSleeping = false;
@@ -88,7 +86,7 @@ class PipBoyView extends WatchUi.WatchFace {
         "z" => [3334, 134160, 8464],
         "-" => [4360],
         ":" => [51364, 84134, 85094, 52324, 54955, 87725, 88685, 55915],
-        "." => [56494, 89264, 90224, 57454],
+        "." => [23662, 56432, 57392, 24622],
         "%" => [8448, 576, 32866, 50212, 18433, 88812, 121102, 138448, 106669],
         "°" => [33408, 65729, 99011, 99972, 67651, 34369]
     };
@@ -100,9 +98,14 @@ class PipBoyView extends WatchUi.WatchFace {
     // ------------------------------------------------------------- lifecycle --
 
     function onLayout(dc as Dc) as Void {
-        mBoy0 = WatchUi.loadResource(Rez.Drawables.VaultBoy);
-        mBoy1 = WatchUi.loadResource(Rez.Drawables.VaultBoy1);
-        mBoy2 = WatchUi.loadResource(Rez.Drawables.VaultBoy2);
+        mBoyFrames[0] = WatchUi.loadResource(Rez.Drawables.VaultBoy) as WatchUi.BitmapResource;
+        mBoyFrames[1] = WatchUi.loadResource(Rez.Drawables.VaultBoy1) as WatchUi.BitmapResource;
+        mBoyFrames[2] = WatchUi.loadResource(Rez.Drawables.VaultBoy2) as WatchUi.BitmapResource;
+        mBoyFrames[3] = WatchUi.loadResource(Rez.Drawables.VaultBoy3) as WatchUi.BitmapResource;
+        mBoyFrames[4] = WatchUi.loadResource(Rez.Drawables.VaultBoy4) as WatchUi.BitmapResource;
+        mBoyFrames[5] = WatchUi.loadResource(Rez.Drawables.VaultBoy5) as WatchUi.BitmapResource;
+        mBoyFrames[6] = WatchUi.loadResource(Rez.Drawables.VaultBoy6) as WatchUi.BitmapResource;
+        mBoyFrames[7] = WatchUi.loadResource(Rez.Drawables.VaultBoy7) as WatchUi.BitmapResource;
     }
 
     function onShow() as Void {
@@ -135,7 +138,7 @@ class PipBoyView extends WatchUi.WatchFace {
         if (mTimer == null) {
             mTimer = new Timer.Timer();
         }
-        mTimer.start(method(:onTick), 350, true);
+        mTimer.start(method(:onTick), 150, true);
     }
 
     function stopTimer() as Void {
@@ -145,18 +148,14 @@ class PipBoyView extends WatchUi.WatchFace {
     }
 
     function onTick() as Void {
-        mAnimStep = (mAnimStep + 1) % 4;
+        mAnimStep = (mAnimStep + 1) % 8;
         WatchUi.requestUpdate();
     }
 
     // ----------------------------------------------------------------- data ---
 
-    function refresh() as Void {
-        mSteps = 0;
-        mStepGoal = 10000;
-        mKcal = 0;
-        mDistStr = "0.00";
-
+    // Fast live metrics (steps, calories, distance in KM, live heart rate)
+    function refreshFast() as Void {
         var info = ActivityMonitor.getInfo();
         if (info != null) {
             if (info.steps != null) {
@@ -170,22 +169,16 @@ class PipBoyView extends WatchUi.WatchFace {
             }
             if (info.distance != null) {
                 var distKm = info.distance.toFloat() / 100000.0;
-                if (System.getDeviceSettings().distanceUnits == System.UNIT_STATUTE) {
-                    var distMiles = distKm * 0.621371;
-                    mDistStr = distMiles.format("%.2f");
-                } else {
-                    mDistStr = distKm.format("%.2f");
-                }
+                mDistStr = distKm.format("%.2f");
             }
         }
 
-        // Live Heart Rate first, then history fallback
-        mHr = 0;
+        // Live Heart Rate first, then recent history fallback
         var actInfo = Activity.getActivityInfo();
         if (actInfo != null && actInfo.currentHeartRate != null && actInfo.currentHeartRate > 25) {
             mHr = actInfo.currentHeartRate;
         } else {
-            var hrIter = ActivityMonitor.getHeartRateHistory(900, true);
+            var hrIter = ActivityMonitor.getHeartRateHistory(5, true);
             if (hrIter != null) {
                 var sample = hrIter.next();
                 while (sample != null) {
@@ -198,6 +191,10 @@ class PipBoyView extends WatchUi.WatchFace {
                 }
             }
         }
+    }
+
+    function refresh() as Void {
+        refreshFast();
 
         // Battery
         var stats = System.getSystemStats();
@@ -205,11 +202,10 @@ class PipBoyView extends WatchUi.WatchFace {
             mBattery = stats.battery.toNumber();
         }
 
-        // Body Battery / PAI (0-100)
-        mBody = -1;
+        // Stamina / Body Battery (0-100)
         if (Toybox has :SensorHistory && Toybox.SensorHistory has :getBodyBatteryHistory) {
             var bbIter = SensorHistory.getBodyBatteryHistory({
-                :period => 3600,
+                :period => 5,
                 :order  => SensorHistory.ORDER_NEWEST_FIRST
             });
             if (bbIter != null) {
@@ -289,7 +285,11 @@ class PipBoyView extends WatchUi.WatchFace {
         var halfPen = penW / 2;
 
         if (!rot90) {
-            var totalW10 = n * cw10 + (n - 1) * gap10;
+            var totalW10 = (n - 1) * gap10;
+            for (var k = 0; k < n; k++) {
+                var chK = text.substring(k, k + 1);
+                totalW10 += chK.equals(".") ? (cw10 * 5) / 10 : cw10;
+            }
             var x0_10 = x480 * 10;
             if (align == ALIGN_CENTER) {
                 x0_10 = x0_10 - totalW10 / 2;
@@ -297,13 +297,13 @@ class PipBoyView extends WatchUi.WatchFace {
                 x0_10 = x0_10 - totalW10;
             }
             var y0_10 = y480 * 10 - ch10 / 2;
-            var step10 = cw10 + gap10;
+            var cx10 = x0_10;
 
             for (var i = 0; i < n; i++) {
                 var chStr = text.substring(i, i + 1);
+                var adv10 = chStr.equals(".") ? (cw10 * 5) / 10 : cw10;
                 var segs = mGlyphs.get(chStr) as Array<Number>?;
                 if (segs != null) {
-                    var cx10 = x0_10 + i * step10;
                     var numSegs = segs.size();
                     for (var j = 0; j < numSegs; j++) {
                         var s = segs[j];
@@ -324,6 +324,7 @@ class PipBoyView extends WatchUi.WatchFace {
                         }
                     }
                 }
+                cx10 += adv10 + gap10;
             }
         } else {
             var totalH10 = n * cw10 + (n - 1) * gap10;
@@ -380,6 +381,8 @@ class PipBoyView extends WatchUi.WatchFace {
         if (ct.min != mLastRefreshMin) {
             mLastRefreshMin = ct.min;
             refresh();
+        } else if (mAnimStep == 0) {
+            refreshFast();
         }
 
         drawScanlines(dc, w, h);
@@ -510,46 +513,43 @@ class PipBoyView extends WatchUi.WatchFace {
         dc.setPenWidth(1);
     }
 
-    // Left column: KCAL, HEARTRATE, PAI, DISTANCE
+    // Left column: KCAL, HEARTRATE, STAMINA, KM (all aligned on the same vertical axis)
     function drawLeftStats(dc as Dc, w as Number, h as Number) as Void {
         // KCAL
         var kcalVal = mKcal.toString();
         var kcalProgress = (mKcalGoal > 0) ? (mKcal.toFloat() / mKcalGoal.toFloat()) : 0.0;
-        drawPipText(dc, w, h, kcalVal, 82, 163, 95, 190, 32, 2, COLOR_GREEN, ALIGN_RIGHT, false);
-        drawPipText(dc, w, h, "KCAL", 90, 149, 68, 120, 24, 2, COLOR_GREEN, ALIGN_LEFT, false);
-        drawRobCoGauge(dc, w, h, 90, 159, 104, 13, kcalProgress, false);
+        drawPipText(dc, w, h, kcalVal, 68, 163, 95, 190, 32, 2, COLOR_GREEN, ALIGN_RIGHT, false);
+        drawPipText(dc, w, h, "KCAL", 76, 148, 68, 120, 24, 2, COLOR_GREEN, ALIGN_LEFT, false);
+        drawRobCoGauge(dc, w, h, 76, 159, 105, 13, kcalProgress, false);
 
         // HEARTRATE
         var hrVal = (mHr > 0) ? mHr.toString() : "--";
         var hrProgress = (mHr > 40) ? ((mHr - 40).toFloat() / 140.0) : 0.0;
-        drawPipText(dc, w, h, hrVal, 65, 209, 95, 190, 32, 2, COLOR_GREEN, ALIGN_RIGHT, false);
-        drawPipText(dc, w, h, "HEARTRATE", 73, 194, 68, 120, 24, 2, COLOR_GREEN, ALIGN_LEFT, false);
-        drawRobCoGauge(dc, w, h, 73, 205, 106, 13, hrProgress, false);
+        drawPipText(dc, w, h, hrVal, 68, 207, 95, 190, 32, 2, COLOR_GREEN, ALIGN_RIGHT, false);
+        drawPipText(dc, w, h, "HEARTRATE", 76, 192, 68, 120, 24, 2, COLOR_GREEN, ALIGN_LEFT, false);
+        drawRobCoGauge(dc, w, h, 76, 203, 105, 13, hrProgress, false);
 
-        // PAI / Body Battery
-        var paiVal = (mBody >= 0) ? mBody.toString() : "--";
-        var paiProgress = (mBody >= 0) ? (mBody.toFloat() / 100.0) : 0.0;
-        drawPipText(dc, w, h, paiVal, 65, 251, 95, 190, 32, 2, COLOR_GREEN, ALIGN_RIGHT, false);
-        drawPipText(dc, w, h, "PAI", 73, 236, 68, 120, 24, 2, COLOR_GREEN, ALIGN_LEFT, false);
-        drawRobCoGauge(dc, w, h, 73, 247, 105, 13, paiProgress, false);
+        // STAMINA (Body Battery 0-100)
+        var staminaVal = (mBody >= 0) ? mBody.toString() : "--";
+        var staminaProgress = (mBody >= 0) ? (mBody.toFloat() / 100.0) : 0.0;
+        drawPipText(dc, w, h, staminaVal, 68, 251, 95, 190, 32, 2, COLOR_GREEN, ALIGN_RIGHT, false);
+        drawPipText(dc, w, h, "STAMINA", 76, 236, 68, 120, 24, 2, COLOR_GREEN, ALIGN_LEFT, false);
+        drawRobCoGauge(dc, w, h, 76, 247, 105, 13, staminaProgress, false);
 
-        // DISTANCE
-        drawPipText(dc, w, h, mDistStr, 37, 296, 95, 190, 26, 2, COLOR_GREEN, ALIGN_LEFT, false);
-        drawPipText(dc, w, h, "DISTANCE", 91, 295, 68, 120, 24, 2, COLOR_GREEN, ALIGN_LEFT, false);
+        // KM (Distance in kilometers)
+        drawPipText(dc, w, h, mDistStr, 68, 295, 95, 190, 26, 2, COLOR_GREEN, ALIGN_RIGHT, false);
+        drawPipText(dc, w, h, "KM", 76, 298, 68, 120, 24, 2, COLOR_GREEN, ALIGN_LEFT, false);
     }
 
-    // Center column: Animated Walking Vault Boy, STEPS gauge & step count
+    // Center column: 8-frame Animated Walking Vault Boy, STEPS gauge & step count
     function drawCenter(dc as Dc, w as Number, h as Number) as Void {
-        var sprite = mBoy0;
-        if (!mSleeping) {
-            if (mAnimStep == 1 || mAnimStep == 3) {
-                if (mBoy2 != null) { sprite = mBoy2; }
-            } else if (mAnimStep == 2) {
-                if (mBoy1 != null) { sprite = mBoy1; }
-            }
+        var idx = mSleeping ? 4 : (mAnimStep % 8);
+        var sprite = mBoyFrames[idx];
+        if (sprite == null) {
+            sprite = mBoyFrames[0];
         }
         if (sprite != null) {
-            var bx = sc(w, 235) - sprite.getWidth() / 2;
+            var bx = sc(w, 240) - sprite.getWidth() / 2;
             var by = sc(h, 125);
             dc.drawBitmap(bx, by, sprite);
         }

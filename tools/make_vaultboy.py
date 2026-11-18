@@ -110,11 +110,12 @@ def warp_frame(src, cw, ch, bob_y, stride_factor, arm_shift):
     return dst
 
 def main():
-    p0 = os.path.join(BASE_DIR, "vaultboy.png")
-    if not os.path.exists(p0):
-        return
-    w, h, f0 = decode_png(p0)
-    print(f"verified {p0} ({w}x{h})")
+    for i in range(8):
+        fname = "vaultboy.png" if i == 0 else f"vaultboy{i}.png"
+        p = os.path.join(BASE_DIR, fname)
+        if os.path.exists(p):
+            w, h, _ = decode_png(p)
+            print(f"verified {p} ({w}x{h})")
 
 if __name__ == "__main__":
     main()

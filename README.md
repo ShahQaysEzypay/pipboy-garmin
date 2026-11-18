@@ -7,10 +7,10 @@ A faithful recreation of the iconic Fallout Pip-Boy 3000 terminal watch face for
     ──────│ MONDAY  │──────
  08 01 2024 [TEMPERATURE] ⛅ 17°
 ─────────────────────────────┬──────
-  198 KCAL [====\__]   🚶   │  04
- 126 HEARTRATE [==\__]      │  --
-  30 PAI [=\__]             │  29
- 6.47 DISTANCE   STEPS      │
+  782 KCAL [====\__]   🚶   │  09
+  52 HEARTRATE [==\__]      │  --
+  65 STAMINA [===\__]       │  40
+ 0.65 KM         STEPS      │
                [___\==|]    └───────
 ┌─────────┐      5123        zZ * 🔔
 │ BATTERY │
@@ -24,7 +24,7 @@ A faithful recreation of the iconic Fallout Pip-Boy 3000 terminal watch face for
 | --- | --- |
 | **Top Badge** | Inverted solid green badge with full weekday name (`MONDAY` - `SUNDAY`) |
 | **Subheader** | Date `DD MM YYYY`, `[ TEMPERATURE ]` box, weather condition icon, and temperature (`17°`) |
-| **Left Stats** | • `KCAL`: Calories burned with angular RobCo progress gauge<br>• `HEARTRATE`: Current BPM with progress gauge<br>• `PAI`: Body Battery / PAI equivalent (0–100) with progress gauge<br>• `DISTANCE`: Daily distance in km or statute miles |
+| **Left Stats** | • `KCAL`: Calories burned with angular RobCo progress gauge<br>• `HEARTRATE`: Current BPM with progress gauge<br>• `STAMINA`: Body Battery (0–100) with progress gauge<br>• `KM`: Daily distance in kilometers |
 | **Center** | Classic walking Vault Boy sprite with multi-frame walking animation |
 | **Steps** | Centered under Vault Boy: `STEPS` label, reversed RobCo bracket gauge, and step count |
 | **Right Time Frame** | RobCo terminal bracket containing vertical 90° `TIME` label, large digital Hour (`04`), separator dashes (`--`), and Minute (`29`) |
