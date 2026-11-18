@@ -1,0 +1,18 @@
+# Build output
+build/
+*.prg
+*.prg.debug.xml
+*.iq
+bin/
+
+# Local signing keys / secrets
+*.der
+*.pem
+*.jks
+keys/
+
+# macOS / editors
+.DS_Store
+.vscode/
+.idea/
+*.swp
