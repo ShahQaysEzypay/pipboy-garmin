@@ -1,4 +1,6 @@
 <drawables>
     <bitmap id="LauncherIcon" filename="launcher_icon.png" />
     <bitmap id="VaultBoy" filename="vaultboy.png" />
+    <bitmap id="VaultBoy1" filename="vaultboy1.png" />
+    <bitmap id="VaultBoy2" filename="vaultboy2.png" />
 </drawables>

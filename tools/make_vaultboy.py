@@ -1,16 +1,12 @@
 #!/usr/bin/env python3
-"""Render the Vault Boy drawable used by the Pip-Boy 3000 watch face.
-
-Extracts and scales the classic walking Vault Boy sprite with transparent
-background for Garmin Connect IQ displays (AMOLED 390x390 / 480x480).
-"""
+"""Render the 3 walking Vault Boy frames used by the Pip-Boy 3000 watch face."""
+import math
 import os
 import struct
 import zlib
 
-OUT = os.path.normpath(
-    os.path.join(os.path.dirname(os.path.abspath(__file__)), "..",
-                 "resources", "drawables", "vaultboy.png")
+BASE_DIR = os.path.normpath(
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "resources", "drawables")
 )
 
 def decode_png(path):
@@ -75,44 +71,50 @@ def write_png(path, width, height, rgba):
     with open(path, "wb") as fh:
         fh.write(png)
 
-def resize_rgba(src_pix, sw, sh, dw, dh):
-    dst = bytearray(dw * dh * 4)
-    x_scale = sw / dw
-    y_scale = sh / dh
-    for dy in range(dh):
-        sy = dy * y_scale
-        iy = int(sy)
-        fy = sy - iy
-        for dx in range(dw):
-            sx = dx * x_scale
-            ix = int(sx)
-            fx = sx - ix
-
-            i00 = (iy * sw + ix) * 4
-            i10 = (iy * sw + min(ix + 1, sw - 1)) * 4
-            i01 = (min(iy + 1, sh - 1) * sw + ix) * 4
-            i11 = (min(iy + 1, sh - 1) * sw + min(ix + 1, sw - 1)) * 4
-
-            di = (dy * dw + dx) * 4
-            for c in range(4):
-                val = (src_pix[i00 + c] * (1 - fx) * (1 - fy) +
-                       src_pix[i10 + c] * fx * (1 - fy) +
-                       src_pix[i01 + c] * (1 - fx) * fy +
-                       src_pix[i11 + c] * fx * fy)
-                dst[di + c] = int(round(val))
+def warp_frame(src, cw, ch, bob_y, stride_factor, arm_shift):
+    dst = bytearray(cw * ch * 4)
+    for y in range(ch):
+        sy_float = y + bob_y
+        if sy_float > 136:
+            t = (sy_float - 136.0) / float(ch - 136.0)
+            t_smooth = t * t * (3.0 - 2.0 * t)
+            scale_x = 1.0 - (1.0 - stride_factor) * t_smooth
+        else:
+            scale_x = 1.0
+        for x in range(cw):
+            sx_float = 46.0 + (x - 46.0) / scale_x
+            if 80 <= sy_float <= 140:
+                at = math.sin((sy_float - 80.0) / 60.0 * math.pi)
+                sx_float -= arm_shift * at
+            ix = int(sx_float)
+            iy = int(sy_float)
+            if 0 <= ix < cw - 1 and 0 <= iy < ch - 1:
+                fx = sx_float - ix
+                fy = sy_float - iy
+                i00 = (iy * cw + ix) * 4
+                i10 = (iy * cw + ix + 1) * 4
+                i01 = ((iy + 1) * cw + ix) * 4
+                i11 = ((iy + 1) * cw + ix + 1) * 4
+                w00 = (1 - fx) * (1 - fy)
+                w10 = fx * (1 - fy)
+                w01 = (1 - fx) * fy
+                w11 = fx * fy
+                a_sum = src[i00+3]*w00 + src[i10+3]*w10 + src[i01+3]*w01 + src[i11+3]*w11
+                oi = (y * cw + x) * 4
+                if a_sum > 64:
+                    for c in range(3):
+                        v = (src[i00+c]*src[i00+3]*w00 + src[i10+c]*src[i10+3]*w10 +
+                             src[i01+c]*src[i01+3]*w01 + src[i11+c]*src[i11+3]*w11) / a_sum
+                        dst[oi+c] = int(round(v))
+                    dst[oi+3] = int(round(a_sum))
     return dst
 
 def main():
-    crop_path = "/tmp/vaultboy_crop.png"
-    if not os.path.exists(crop_path):
-        print(f"Waiting for crop at {crop_path}")
+    p0 = os.path.join(BASE_DIR, "vaultboy.png")
+    if not os.path.exists(p0):
         return
-    w, h, pix = decode_png(crop_path)
-    dw, dh = 77, 155
-    scaled = resize_rgba(pix, w, h, dw, dh)
-    os.makedirs(os.path.dirname(OUT), exist_ok=True)
-    write_png(OUT, dw, dh, scaled)
-    print(f"wrote {OUT}  {dw}x{dh}")
+    w, h, f0 = decode_png(p0)
+    print(f"verified {p0} ({w}x{h})")
 
 if __name__ == "__main__":
     main()

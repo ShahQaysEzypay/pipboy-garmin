@@ -11,11 +11,11 @@ A faithful recreation of the iconic Fallout Pip-Boy 3000 terminal watch face for
  126 HEARTRATE [==\__]      │  --
   30 PAI [=\__]             │  29
  6.47 DISTANCE   STEPS      │
-               [___\==|]    └──37───
+               [___\==|]    └───────
 ┌─────────┐      5123        zZ * 🔔
 │ BATTERY │
 │   90%   │       PIP-BOY 3000
-└─────────┘     ROBCO INDUSTRIES
+└─────────┘     QAYS INDUSTRIES
 ```
 
 ## Features & Display Layout
@@ -23,14 +23,14 @@ A faithful recreation of the iconic Fallout Pip-Boy 3000 terminal watch face for
 | Section | Elements & Data Source |
 | --- | --- |
 | **Top Badge** | Inverted solid green badge with full weekday name (`MONDAY` - `SUNDAY`) |
-| **Subheader** | Date `DD  MM  YYYY`, `[ TEMPERATURE ]` box, weather condition icon, and temperature (`17°`) |
+| **Subheader** | Date `DD MM YYYY`, `[ TEMPERATURE ]` box, weather condition icon, and temperature (`17°`) |
 | **Left Stats** | • `KCAL`: Calories burned with angular RobCo progress gauge<br>• `HEARTRATE`: Current BPM with progress gauge<br>• `PAI`: Body Battery / PAI equivalent (0–100) with progress gauge<br>• `DISTANCE`: Daily distance in km or statute miles |
-| **Center** | Classic walking Vault Boy sprite with dynamic walking animation / step bobbing |
+| **Center** | Classic walking Vault Boy sprite with multi-frame walking animation |
 | **Steps** | Centered under Vault Boy: `STEPS` label, reversed RobCo bracket gauge, and step count |
-| **Right Time Frame** | RobCo terminal bracket containing vertical `TIME` label, large digital Hour (`04`), separator dashes (`--`), Minute (`29`), and Seconds (`37`) cutout in bottom rail |
-| **Status Bar** | System status icons under seconds: Do Not Disturb (`zZ`), Bluetooth phone connection, Alarm, and Lock |
+| **Right Time Frame** | RobCo terminal bracket containing vertical 90° `TIME` label, large digital Hour (`04`), separator dashes (`--`), and Minute (`29`) |
+| **Status Bar** | System status icons under the time box: Do Not Disturb (`zZ`), Bluetooth phone connection, Alarm, and Lock |
 | **Bottom Left** | `[ BATTERY ]` boxed badge with battery percentage readout (`90%`) |
-| **Footer** | `PIP-BOY 3000` / `ROBCO INDUSTRIES` pre-war branding |
+| **Footer** | `PIP-BOY 3000` / `QAYS INDUSTRIES` branding |
 | **CRT Aesthetic** | CRT horizontal scanlines across the AMOLED display in deep phosphor green (`#0A3309`) |
 | **AOD Low Power Mode** | Energy-efficient ambient mode with dim clock, date, and vitals respecting AMOLED burn-in protection |
 
